@@ -90,7 +90,7 @@ action/       the GitHub Action (composite)
 server/       Flask platform: accounts, projects, results, audit log, dashboard
 agent/        Phase 2 agent (polls the platform, scans locally)
 tests/        pytest suite (24 tests)
-examples/     example workflow to copy into your repo
+examples/     example workflow to copy into your repo 
 ```
 
 ## Safety design (for review)
