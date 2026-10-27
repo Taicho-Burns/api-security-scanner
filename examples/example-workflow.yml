@@ -1,0 +1,42 @@
+# Copy this file into your own repository at:
+#   .github/workflows/api-security.yml
+#
+# It starts YOUR api on localhost inside the CI runner, then scans that
+# copy on every push and pull request. Nothing leaves the runner, so no
+# real server and no one else's API is ever touched.
+#
+# Edit the two marked lines for your project.
+
+name: API security
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  api-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 1) Start YOUR api on localhost. Replace with your own start command.
+      - name: Start API
+        run: |
+          pip install -r requirements.txt
+          python app.py &        # <-- CHANGE: however your API starts
+          sleep 5                 # give it time to come up
+
+      # 2) Scan it. Fails the build (❌ on the pull request) on a high finding.
+      - name: API Security Scanner
+        uses: your-org/api-security-scanner/action@v1   # <-- CHANGE to your repo
+        with:
+          target: "http://localhost:8000"   # <-- CHANGE if your port differs
+          openapi: "openapi.json"           # optional static check; remove if none
+          fail-on: "high"
+          # To also send results to your dashboard (Phase 1 platform):
+          # report-url: "https://your-platform.example/api/results"
+          # token: ${{ secrets.API_SCANNER_TOKEN }}

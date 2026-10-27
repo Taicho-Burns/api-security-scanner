@@ -1,0 +1,15 @@
+# The platform (Flask API + dashboard).
+# Build: docker build -f Dockerfile.server -t api-scanner-platform .
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY scanner/ ./scanner/
+COPY server/ ./server/
+
+ENV SECRET_KEY=change-me-in-production
+EXPOSE 5000
+# gunicorn in production; Flask's server is fine for the demo.
+CMD ["python", "-m", "server.app"]

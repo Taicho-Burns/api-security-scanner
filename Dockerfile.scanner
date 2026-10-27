@@ -1,0 +1,12 @@
+# The scanner, packaged as a container so the GitHub Action (and the agent)
+# can run it with one command. Build: docker build -f Dockerfile.scanner -t api-scanner .
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir requests pyyaml dnspython
+
+COPY scanner/ ./scanner/
+
+ENTRYPOINT ["python", "-m", "scanner.cli"]
+# e.g. docker run --network host api-scanner --target http://localhost:8000

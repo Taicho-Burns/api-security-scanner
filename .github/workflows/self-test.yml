@@ -1,0 +1,61 @@
+name: self-test
+
+# Proves the scanner works: it must FAIL the build on the vulnerable API and
+# PASS on the secure API. Runs on every push and pull request.
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q
+
+  scan-vulnerable-must-fail:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: Start the vulnerable test API on localhost
+        run: |
+          python -m testapi.vulnerable_api &
+          sleep 3
+      - name: Scan it — we EXPECT a failure (exit 1)
+        run: |
+          set +e
+          python -m scanner.cli --target http://localhost:8000 \
+            --openapi testapi/openapi_vulnerable.json --json-out report.json
+          code=$?
+          echo "scanner exit code: $code"
+          if [ "$code" -ne 1 ]; then
+            echo "::error::Expected the scanner to fail the build on the vulnerable API, but it did not."
+            exit 1
+          fi
+          echo "Correct: the scanner failed the build on the vulnerable API."
+
+  scan-secure-must-pass:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: Start the secure test API on localhost
+        run: |
+          python -m testapi.secure_api &
+          sleep 3
+      - name: Scan it with the composite action — EXPECT a pass
+        uses: ./action
+        with:
+          target: "http://localhost:8001"
+          fail-on: "high"

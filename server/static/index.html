@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API Security Scanner</title>
+<!-- Libraries are vendored locally so the dashboard runs with no internet. -->
+<script src="/static/vendor/react.production.min.js"></script>
+<script src="/static/vendor/react-dom.production.min.js"></script>
+<script src="/static/vendor/prop-types.min.js"></script>
+<script src="/static/vendor/recharts.min.js"></script>
+<script src="/static/vendor/babel.min.js"></script>
+<style>
+  :root{
+    --bg:#0f141b; --panel:#171f2a; --panel2:#1e2834; --line:#2a3744; --fg:#e7edf3; --muted:#93a3b4;
+    --accent:#4f9dec; --high:#e5564b; --medium:#e0922f; --low:#4aa3c7; --ok:#36b37e;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.5}
+  a{color:var(--accent)}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{font-size:17px;margin:0;display:flex;align-items:center;gap:9px}
+  header .shield{width:22px;height:22px;flex:none}
+  .wrap{max-width:1000px;margin:0 auto;padding:22px 18px 60px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+  .card h2{font-size:15px;margin:0 0 12px}
+  label{display:block;font-size:12px;color:var(--muted);margin:8px 0 4px}
+  input,select{width:100%;padding:9px 11px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--fg);font-size:14px}
+  button{font:inherit;font-size:14px;padding:9px 15px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#06101d;font-weight:600;cursor:pointer}
+  button.ghost{background:transparent;color:var(--fg);border-color:var(--line)}
+  button:disabled{opacity:.5;cursor:default}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .row>div{flex:1;min-width:150px}
+  .muted{color:var(--muted);font-size:13px}
+  .mono{font-family:var(--mono);font-size:12px;word-break:break-all}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600}
+  .pill.high{background:rgba(229,86,75,.18);color:var(--high)}
+  .pill.medium{background:rgba(224,146,47,.18);color:var(--medium)}
+  .pill.low{background:rgba(74,163,199,.18);color:var(--low)}
+  .pill.none{background:rgba(54,179,126,.18);color:var(--ok)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600}
+  .finding{border:1px solid var(--line);border-radius:9px;padding:11px 13px;margin-bottom:8px;background:var(--panel2)}
+  .finding .t{font-weight:600;margin-bottom:3px}
+  .finding .ev{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:5px;white-space:pre-wrap}
+  .err{color:var(--high);font-size:13px;margin-top:8px}
+  .ok{color:var(--ok);font-size:13px;margin-top:8px}
+  .codeblock{background:#0b1016;border:1px solid var(--line);border-radius:8px;padding:11px;font-family:var(--mono);font-size:11.5px;white-space:pre;overflow-x:auto}
+  .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+  .tabs button{background:var(--panel2);color:var(--muted);border-color:var(--line);font-weight:500}
+  .tabs button.active{background:var(--accent);color:#06101d;border-color:var(--accent);font-weight:600}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:720px){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect } = React;
+const R = Recharts;
+const SEV = ["high","medium","low","none"];
+const SEVC = {high:"#e5564b",medium:"#e0922f",low:"#4aa3c7",none:"#36b37e"};
+
+async function api(path, opts={}) {
+  const res = await fetch(path, {credentials:"same-origin",
+    headers:{"Content-Type":"application/json"}, ...opts});
+  let data = null; try { data = await res.json(); } catch(e){}
+  if(!res.ok) throw new Error((data && data.error) || ("HTTP "+res.status));
+  return data;
+}
+
+function Shield(){
+  return <svg className="shield" viewBox="0 0 24 24" fill="none" stroke="#4f9dec" strokeWidth="2">
+    <path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z"/><path d="M9 12l2 2 4-4"/></svg>;
+}
+
+function Auth({onLogin}){
+  const [mode,setMode]=useState("login");
+  const [email,setEmail]=useState(""); const [pw,setPw]=useState("");
+  const [msg,setMsg]=useState(null); const [err,setErr]=useState(null);
+  async function submit(){
+    setErr(null); setMsg(null);
+    try{
+      if(mode==="register"){
+        const r=await api("/api/register",{method:"POST",body:JSON.stringify({email,password:pw})});
+        // No mail server in the demo: the confirm link is returned so the flow works.
+        setMsg("Registered. Confirming email…");
+        await api(r.confirm_link);
+        setMsg("Email confirmed — you can log in now.");
+        setMode("login");
+      } else {
+        await api("/api/login",{method:"POST",body:JSON.stringify({email,password:pw})});
+        onLogin();
+      }
+    }catch(e){setErr(e.message);}
+  }
+  return <div className="wrap"><div className="card" style={{maxWidth:420,margin:"40px auto"}}>
+    <div className="tabs">
+      <button className={mode==="login"?"active":""} onClick={()=>setMode("login")}>Log in</button>
+      <button className={mode==="register"?"active":""} onClick={()=>setMode("register")}>Register</button>
+    </div>
+    <label>Email</label><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/>
+    <label>Password</label><input type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="8+ characters"/>
+    <div style={{marginTop:14}}><button onClick={submit}>{mode==="login"?"Log in":"Register"}</button></div>
+    {msg&&<div className="ok">{msg}</div>}
+    {err&&<div className="err">{err}</div>}
+  </div></div>;
+}
+
+function Donut({run}){
+  const data = SEV.map(s=>({name:s,value:run[s==="none"?"ok":s]||0})).filter(d=>d.value>0);
+  if(!data.length) return <span className="muted">no data</span>;
+  return <R.PieChart width={150} height={150}>
+    <R.Pie data={data} dataKey="value" nameKey="name" innerRadius={38} outerRadius={60} paddingAngle={2}>
+      {data.map((d,i)=><R.Cell key={i} fill={SEVC[d.name]}/>)}
+    </R.Pie>
+    <R.Tooltip contentStyle={{background:"#171f2a",border:"1px solid #2a3744",borderRadius:8}}/>
+  </R.PieChart>;
+}
+
+function History({runs}){
+  const data=[...runs].reverse().map((r,i)=>({name:"#"+r.id,high:r.high,medium:r.medium,low:r.low}));
+  if(data.length<1) return null;
+  return <R.BarChart width={Math.min(560,Math.max(260,data.length*54))} height={190} data={data}>
+    <R.CartesianGrid strokeDasharray="3 3" stroke="#2a3744"/>
+    <R.XAxis dataKey="name" stroke="#93a3b4" fontSize={11}/>
+    <R.YAxis allowDecimals={false} stroke="#93a3b4" fontSize={11}/>
+    <R.Tooltip contentStyle={{background:"#171f2a",border:"1px solid #2a3744",borderRadius:8}}/>
+    <R.Legend/>
+    <R.Bar dataKey="high" stackId="a" fill={SEVC.high}/>
+    <R.Bar dataKey="medium" stackId="a" fill={SEVC.medium}/>
+    <R.Bar dataKey="low" stackId="a" fill={SEVC.low}/>
+  </R.BarChart>;
+}
+
+function Finding({f}){
+  return <div className="finding">
+    <div className="t"><span className={"pill "+f.severity}>{f.severity.toUpperCase()}</span> {f.title}</div>
+    <div className="muted">{f.check} · {f.owasp} · confidence: {f.confidence}</div>
+    <div style={{marginTop:5}}>{f.detail}</div>
+    {f.severity!=="none" && <div style={{marginTop:5}}><b>Fix:</b> {f.fix}</div>}
+    {f.evidence&&f.evidence.length>0 && <div className="ev">{f.evidence.join("\n")}</div>}
+  </div>;
+}
+
+function ProjectView({project,onBack}){
+  const [runs,setRuns]=useState([]); const [open,setOpen]=useState(null);
+  async function load(){ setRuns(await api(`/api/projects/${project.id}/runs`)); }
+  useEffect(()=>{load();},[project.id]);
+  const latest=runs[0];
+  return <div>
+    <button className="ghost" onClick={onBack}>← all projects</button>
+    <div className="card" style={{marginTop:12}}>
+      <h2>{project.name} <span className="muted">· {project.repo||"no repo"}</span></h2>
+      {!latest && <div className="muted">No scans yet. Add the workflow to your repo and push, or queue an agent scan.</div>}
+      {latest && <div className="grid2">
+        <div>
+          <div className="muted">Latest run #{latest.id} · {latest.mode} mode · {new Date(latest.at).toLocaleString()}</div>
+          <div style={{margin:"6px 0"}}>
+            <span className="pill high">{latest.high} high</span>{" "}
+            <span className="pill medium">{latest.medium} medium</span>{" "}
+            <span className="pill low">{latest.low} low</span>{" "}
+            <span className="pill none">{latest.ok} ok</span>
+          </div>
+          <Donut run={latest}/>
+        </div>
+        <div><div className="muted" style={{marginBottom:6}}>History</div><History runs={runs}/></div>
+      </div>}
+    </div>
+    {latest && <div className="card">
+      <h2>Findings — run #{latest.id}</h2>
+      {latest.findings.sort((a,b)=>SEV.indexOf(a.severity)-SEV.indexOf(b.severity)).map((f,i)=><Finding key={i} f={f}/>)}
+    </div>}
+    <div className="card">
+      <h2>All runs</h2>
+      <table><thead><tr><th>#</th><th>When</th><th>Mode</th><th>Target</th><th>High</th><th>Medium</th></tr></thead>
+      <tbody>{runs.map(r=><tr key={r.id}><td>{r.id}</td><td className="muted">{new Date(r.at).toLocaleString()}</td>
+        <td>{r.mode}</td><td className="mono">{r.target}</td>
+        <td><span className="pill high">{r.high}</span></td><td><span className="pill medium">{r.medium}</span></td></tr>)}</tbody></table>
+    </div>
+  </div>;
+}
+
+function NewProject({onCreated}){
+  const [name,setName]=useState(""); const [repo,setRepo]=useState("");
+  const [created,setCreated]=useState(null); const [err,setErr]=useState(null);
+  async function create(){
+    setErr(null);
+    try{ setCreated(await api("/api/projects",{method:"POST",body:JSON.stringify({name,repo})})); onCreated&&onCreated(); }
+    catch(e){setErr(e.message);}
+  }
+  return <div className="card">
+    <h2>New project</h2>
+    <div className="row">
+      <div><label>Name</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="My API"/></div>
+      <div><label>GitHub repo (optional)</label><input value={repo} onChange={e=>setRepo(e.target.value)} placeholder="me/app"/></div>
+      <div style={{flex:"none"}}><button onClick={create}>Create</button></div>
+    </div>
+    {err&&<div className="err">{err}</div>}
+    {created && <div style={{marginTop:14}}>
+      <div className="ok">Project created. Copy your token now — it is shown only once:</div>
+      <div className="mono" style={{margin:"6px 0 12px"}}>{created.token}</div>
+      <div className="muted">Add this workflow to <span className="mono">.github/workflows/api-security.yml</span>, and save the token as the secret <span className="mono">API_SCANNER_TOKEN</span>:</div>
+      <div className="codeblock">{created.workflow}</div>
+    </div>}
+  </div>;
+}
+
+function Projects({onOpen}){
+  const [projects,setProjects]=useState([]); const [tick,setTick]=useState(0);
+  async function load(){ setProjects(await api("/api/projects")); }
+  useEffect(()=>{load();},[tick]);
+  return <div>
+    <NewProject onCreated={()=>setTick(t=>t+1)}/>
+    <div className="card">
+      <h2>Projects</h2>
+      {!projects.length && <div className="muted">No projects yet.</div>}
+      <table><tbody>{projects.map(p=><tr key={p.id}>
+        <td><a href="#" onClick={e=>{e.preventDefault();onOpen(p);}}>{p.name}</a><div className="muted mono">{p.token_prefix}…</div></td>
+        <td className="muted">{p.repo||""}</td>
+        <td>{p.last_run?<><span className="pill high">{p.last_run.high} high</span> <span className="muted">{new Date(p.last_run.at).toLocaleDateString()}</span></>:<span className="muted">no runs</span>}</td>
+      </tr>)}</tbody></table>
+    </div>
+  </div>;
+}
+
+function AuditLog(){
+  const [logs,setLogs]=useState([]);
+  useEffect(()=>{api("/api/audit").then(setLogs).catch(()=>{});},[]);
+  return <div className="card"><h2>Audit log</h2>
+    <table><thead><tr><th>When</th><th>Action</th><th>Status</th><th>Target</th><th>Detail</th></tr></thead>
+    <tbody>{logs.map((l,i)=><tr key={i}><td className="muted">{l.at?new Date(l.at).toLocaleString():""}</td>
+      <td className="mono">{l.action}</td><td>{l.status}</td><td className="mono">{l.target||""}</td><td className="muted">{l.detail||""}</td></tr>)}</tbody></table>
+  </div>;
+}
+
+function App(){
+  const [me,setMe]=useState(undefined);
+  const [tab,setTab]=useState("projects");
+  const [openProject,setOpenProject]=useState(null);
+  async function refresh(){ try{const m=await api("/api/me");setMe(m.email);}catch(e){setMe(null);} }
+  useEffect(()=>{refresh();},[]);
+  if(me===undefined) return <div className="wrap"><div className="muted">Loading…</div></div>;
+  if(!me) return <><Header me={null}/><Auth onLogin={refresh}/></>;
+  return <>
+    <Header me={me} onLogout={async()=>{await api("/api/logout",{method:"POST"});setMe(null);}}/>
+    <div className="wrap">
+      {!openProject && <div className="tabs">
+        <button className={tab==="projects"?"active":""} onClick={()=>setTab("projects")}>Projects</button>
+        <button className={tab==="audit"?"active":""} onClick={()=>setTab("audit")}>Audit log</button>
+      </div>}
+      {openProject ? <ProjectView project={openProject} onBack={()=>setOpenProject(null)}/> :
+        tab==="projects" ? <Projects onOpen={setOpenProject}/> : <AuditLog/>}
+    </div>
+  </>;
+}
+
+function Header({me,onLogout}){
+  return <header><h1><Shield/> API Security Scanner</h1>
+    {me && <div className="row" style={{alignItems:"center"}}><span className="muted">{me}</span>
+      <button className="ghost" onClick={onLogout}>Log out</button></div>}
+  </header>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

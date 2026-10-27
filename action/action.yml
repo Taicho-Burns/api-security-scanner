@@ -1,0 +1,60 @@
+name: "API Security Scanner"
+description: "Scan an API running on localhost in CI for the 4 core security checks. Fails the build on a high-severity finding."
+author: "Edward"
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  target:
+    description: "Base URL of the API under test (must be localhost/private in CI mode)"
+    required: false
+    default: "http://localhost:8000"
+  openapi:
+    description: "Path to an OpenAPI JSON/YAML file for the static check (optional)"
+    required: false
+    default: ""
+  fail-on:
+    description: "Minimum severity that fails the build: high | medium | low"
+    required: false
+    default: "high"
+  report-url:
+    description: "Platform URL to POST results to (optional)"
+    required: false
+    default: ""
+  token:
+    description: "Project token for the platform (store as a GitHub secret)"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install scanner
+      shell: bash
+      run: pip install --quiet requests pyyaml
+
+    - name: Run API Security Scanner
+      shell: bash
+      env:
+        SCANNER_TOKEN: ${{ inputs.token }}
+      run: |
+        ARGS="--target '${{ inputs.target }}' --fail-on '${{ inputs.fail-on }}' --json-out scan-report.json"
+        if [ -n "${{ inputs.openapi }}" ]; then ARGS="$ARGS --openapi '${{ inputs.openapi }}'"; fi
+        if [ -n "${{ inputs.report-url }}" ]; then ARGS="$ARGS --report-url '${{ inputs.report-url }}' --token \"$SCANNER_TOKEN\""; fi
+        # The action lives next to the `scanner/` package; run it from here.
+        cd "${{ github.action_path }}/.."
+        eval python -m scanner.cli $ARGS
+
+    - name: Upload report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: api-security-report
+        path: scan-report.json
+        if-no-files-found: ignore

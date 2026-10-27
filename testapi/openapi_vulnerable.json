@@ -1,0 +1,16 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Demo API (vulnerable)", "version": "1.0.0" },
+  "servers": [{ "url": "http://api.demo.example" }],
+  "paths": {
+    "/api/account": { "get": { "summary": "Account details", "responses": { "200": { "description": "ok" } } } },
+    "/api/items": { "get": { "summary": "List items", "responses": { "200": { "description": "ok" } } } },
+    "/api/users/{id}/profile": {
+      "get": {
+        "summary": "User profile",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "ok" } }
+      }
+    }
+  }
+}
