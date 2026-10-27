@@ -111,6 +111,3 @@ would carry their own IP, and the platform never stores results or creates jobs
 for targets that are not verified.
 
 ---
-
-Built as a 個人開発 (personal development) project. Not a replacement for a
-professional security assessment.
