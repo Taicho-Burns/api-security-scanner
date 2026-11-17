@@ -111,6 +111,11 @@ would carry their own IP, and the platform never stores results or creates jobs
 for targets that are not verified.
 
 ---
+## About AI use / AI活用について
+
+I built this project with help from AI tools (Claude). I decided the design myself (CI mode first, then agent mode, and the rule that only the owner of an API can scan it) and checked that it works.
+
+本プロジェクトのコードは、AIツール（Claude）を活用して作成しました。CIモードとエージェントモードの構成や、自分が管理していないAPIには使えない仕組みなどの設計方針は自分で決め、動作確認を行いました。
 
 Built as a 個人開発 (personal development) project. Not a replacement for a
 professional security assessment.
